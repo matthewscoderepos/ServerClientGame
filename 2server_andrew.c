@@ -8,12 +8,16 @@
 #include <netdb.h>
 #include <sys/sem.h>
 #include <sys/shm.h>
+#include <pthread.h>
 
 #define SHMKEY ((key_t)7890)
 #define SEMKEY ((key_t)400L)
 #define NSEMS 2
 #define PORTNUM 3440       /* the port number the server will listen to*/
 #define DEFAULT_PROTOCOL 0 /*constant for default protocol*/
+
+// global mutexes for threads
+pthread_mutex_t mutex_client1, mutex_client2;
 
 typedef struct
 {
@@ -43,6 +47,17 @@ void game(int sock);
 
 int main(int argc, char *argv[])
 {
+    // creating threads
+
+    pthread_t thread_client1, thread_client2;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+
+    pthread_mutex_init(&mutex_client1);
+    pthread_mutex_init(&mutex_client2);
+
+    // end threads
+
     numReady = semget(SEMKEY, NSEMS, IPC_CREAT | 0660);
     if (numReady < 0)
     {

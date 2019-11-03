@@ -18,6 +18,7 @@
 
 // global mutexes for threads
 pthread_mutex_t mutex_client1, mutex_client2;
+int OTHER_CLIENT_WORKING = 0;
 
 typedef struct
 {
@@ -45,18 +46,39 @@ int semnum, semval;
 void doprocessing(int sock);
 void game(int sock);
 
+void *client1_execution(void *args) {
+    pthread_mutex_lock(&mutex_client1);
+
+    if (OTHER_CLIENT_WORKING == 0) {
+        OTHER_CLIENT_WORKING == 1;
+
+
+        OTHER_CLIENT_WORKING == 0;
+    }
+    else
+    {
+        // im not sure... do we print and let them do stuff? 
+        // prob use a semaphore instead of global var... that way it waits and
+        // still executes the code (write, read, etc), need to make sure
+        // we send the letter array to both clients data->socketID[0] and 
+        // data->socketID[1] after reading chosen letter from ONE client
+    }
+    
+
+    pthread_mutex_unlock(&mutex_client2);
+    pthread_exit(0); // exit client 1 thread
+}
+
+void *client2_execution(void *args) {
+    pthread_mutex_lock(&mutex_client2);
+
+    if (OTHER_CLIENT_WORKING == 0) {
+
+    }
+}
+
 int main(int argc, char *argv[])
 {
-    // creating threads
-
-    pthread_t thread_client1, thread_client2;
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-
-    pthread_mutex_init(&mutex_client1);
-    pthread_mutex_init(&mutex_client2);
-
-    // end threads
 
     numReady = semget(SEMKEY, NSEMS, IPC_CREAT | 0660);
     if (numReady < 0)
@@ -127,8 +149,21 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    /* Now Server starts listening clients wanting to connect. No 	more than 5 clients allowed */
+    // making threads
+    pthread_t thread_client1, thread_client2;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
 
+    pthread_mutex_init(&mutex_client1, NULL);
+    pthread_mutex_init(&mutex_client2, NULL);
+
+    pthread_mutex_lock(&mutex_client1);
+    pthread_mutex_lock(&mutex_client2);
+
+    pthread_create(&thread_client1, &attr, client1_execution, NULL);
+    pthread_create(&thread_client2, &attr, client2_execution, NULL);
+
+    /* Now Server starts listening clients wanting to connect. No 	more than 5 clients allowed */
     listen(sockfd, 5);
     clilen = sizeof(cli_addr);
     while (1)
@@ -149,8 +184,11 @@ int main(int argc, char *argv[])
             exit(1);
         }
 
-        /* Create child process */
+        // /* Create child process */
         pid = fork();
+
+        // create new thread
+        pthread_join(thread_client1, NULL);
 
         if (pid < 0)
         {

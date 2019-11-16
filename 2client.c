@@ -12,7 +12,7 @@
 #include <sys/select.h>
 #include <pthread.h>
 
-#define PORTNUM 3440       /* the port number that the server is listening to*/
+#define PORTNUM 3441       /* the port number that the server is listening to*/
 #define DEFAULT_PROTOCOL 0 /*constant for default protocol*/
 
 char endString[36] = "- - - - \n- - - - \n- - - - \n- - - -\n";
@@ -21,7 +21,7 @@ void main()
 
 {
     int port;
-    int socketid;     /*will hold the id of the socket created*/ 
+    int socketid;     /*will hold the id of the socket created*/
     int status;       /* error status holder*/
     char buffer[256]; /* the message buffer*/
     int cont = 1;
@@ -65,6 +65,7 @@ void main()
         printf(" error in connecting client socket with server	\n");
         exit(-1);
     }
+RESETGAME:
 
     printf("Enter \"ready\" to play the game or \"exit\" to exit.\n");
     bzero(buffer, 256);
@@ -83,7 +84,7 @@ void main()
     {
         bzero(buffer, 256);
         status = read(socketid, buffer, 255); //either "Waiting on other client." or "Sending Letters. Good luck."
-        printf("%s", buffer);
+        printf(buffer);
 
         if (status < 0)
         {
@@ -110,29 +111,43 @@ void main()
             exit(1);
         }
         printf("\nChoose a letter: \n%s\n", buffer); //printing letters here
-       
+        int recieved = 0;
         while (cont)
         {
             bzero(buffer, 256);
             fgets(buffer, 255, stdin);
             //input validation
-            if(buffer[0] == '\n') continue;
+            if (buffer[0] == '\n')
+                continue;
 
             status = write(socketid, buffer, 255); //sending chosen letter
             if (strcmp(buffer, "exit\n") == 0)
             {
-                cont = 0;
                 break;
             }
-            status = read(socketid, buffer, 255);
-            printf("%s\n", buffer);
-             
-            status = read(socketid, buffer, 255);      // Getting letters here
-            if (!strcmp(buffer,endString)){
+            bzero(buffer, 256);
+            status = read(socketid, buffer, 255); //this gets the letter found message from the p selection 
+            printf(buffer);
+            bzero(buffer, 256);
+            status = read(socketid, buffer, 255); // Getting letters here // This gets the empty string and the do you want to play again
+            if (!strcmp(buffer, endString) || status == 0)
+            {
                 printf("Game over.\n");
                 break;
             }
-            printf("Choose a letter: \n%s\n", buffer); //printing letters here
+            printf("\nChoose a letter: \n%s\n", buffer); //printing letters here
+        }
+        status = read(socketid, buffer, 255); // Would you like to play again?
+        printf(buffer);
+        bzero(buffer, 256);
+        fgets(buffer, 255, stdin); //y or n
+
+        //this write never happens
+        status = write(socketid, buffer, 255); //sending chosen letter
+
+        if (!strcmp(buffer, "Y\n") || !strcmp(buffer, "y\n"))
+        {
+            goto RESETGAME;
         }
     }
     else

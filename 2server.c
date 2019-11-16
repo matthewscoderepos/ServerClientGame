@@ -16,7 +16,7 @@
 #define SHMKEY ((key_t)7890)
 #define SEMKEY ((key_t)400L)
 #define NSEMS 1
-#define PORTNUM 3440       /* the port number the server will listen to*/
+#define PORTNUM 3441       /* the port number the server will listen to*/
 #define DEFAULT_PROTOCOL 0 /*constant for default protocol*/
 
 typedef struct
@@ -44,6 +44,9 @@ int semnum, semval;
 
 void doprocessing(int sock, int pid);
 void game(int sock, int pid);
+void resetGame();
+
+char newLetters[36] = "a b c d \ne f g h \ni j k l \nm n o p\n";
 
 int main(int argc, char *argv[])
 {
@@ -72,8 +75,6 @@ int main(int argc, char *argv[])
         perror("shmat");
         exit(0);
     }
-
-    char newLetters[36] = "a b c d \ne f g h \ni j k l \nm n o p\n";
 
     strcpy(data->letters, newLetters);
     data->numClients = 0;
@@ -168,6 +169,7 @@ int main(int argc, char *argv[])
 
 void doprocessing(int sock, int pid)
 {
+
     int status;
     char buffer[256];
     int cont = 1;
@@ -209,12 +211,23 @@ void doprocessing(int sock, int pid)
             if (data->p1score > data->p2score)
             {
                 printf("Player 1 wins with score %d\n", data->p1score);
-                return;
             }
             else
             {
                 printf("Player 2 wins with score %d\n", data->p2score);
-                return;
+            }
+
+            //Check if the clients want to continue with a new game
+
+            status = write(sock, "Would you like to play again? Y/N\n", 34);
+            printf("Status of play again: %d", status);
+            bzero(buffer, 256);
+            status = read(sock, buffer, 255);
+            printf("%s", buffer);
+            if (!strcmp(buffer, "Y\n") || !strcmp(buffer, "y\n"))
+            {
+                resetGame(sock, pid);
+                doprocessing(sock, pid);
             }
         }
         else if ((strcmp(buffer, "exit\n") == 0))
@@ -248,47 +261,89 @@ void game(int sock, int pid)
         found = 0;
         bzero(buffer, 256);
         status = read(sock, buffer, 255); //recieving letter from client
-        printf("Recieved from client %d\n", pid);
-
         if (status < 0)
         {
             printf("In error\n");
             perror("ERROR reading from socket");
             exit(1);
         }
-
-        printf("Recieved: %c , value : %d\n", buffer[0], buffer[0]);
-
-        for (i = 0; i < strlen(data->letters); i++)
+        if (status > 0)
         {
-            if (data->letters[i] == buffer[0])
+            printf("Recieved from client %d\n", pid);
+
+            if (!strcmp(buffer, "exit\n"))
             {
-                data->letters[i] = '-';
-                data->recieved++;
+                write(sock, "Goodbye.\n", 255);
+                return;
+            }
+
+            printf("Recieved: %c , value : %d\n", buffer[0], buffer[0]);
+
+            for (i = 0; i < strlen(data->letters); i++)
+            {
+                if (data->letters[i] == buffer[0])
+                {
+                    data->letters[i] = '-';
+                    data->recieved++;
+                    if (pid == 1)
+                    {
+                        data->p1score += buffer[0];
+                    }
+                    if (pid == 2)
+                    {
+                        data->p2score += buffer[0];
+                    }
+                    found = 1;
+                    printf("Player 1 score: %d\n", data->p1score);
+                    printf("Player 2 score: %d\n", data->p2score);
+                    printf("\n-----------------\n");
+                }
+            }
+            char *str;
+
+            if (!found)
+            {
+
+                printf("The recieved letter %c was not found.\n", buffer[0]);
                 if (pid == 1)
                 {
-                    data->p1score += buffer[0];
+                    asprintf(&str, "Letter Unavailable.\nYour score: %d\nPlayer 2 score: %d\n\0", data->p1score, data->p2score);
+                    write(sock, str, strlen(str));
                 }
-                if (pid == 2)
+                else
                 {
-                    data->p2score += buffer[0];
+                    asprintf(&str, "Letter Unavailable.\nYour score: %d\nPlayer 1 score: %d\n\0", data->p2score, data->p1score);
+                    write(sock, str, strlen(str));
                 }
-                found = 1;
-                printf("Player 1 score: %d\n", data->p1score);
-                printf("Player 2 score: %d\n", data->p2score);
-                printf("\n-----------------\n");
             }
+            else
+            {
+                if (pid == 1)
+                {
+                    asprintf(&str, "Letter Found.\nYour score: %d\nPlayer 2 score: %d\n\0", data->p1score, data->p2score);
+                    write(sock, str, strlen(str));
+                }
+                else
+                {
+                    asprintf(&str, "Letter Found.\nYour score: %d\nPlayer 1 score: %d\n\0", data->p2score, data->p1score);
+                    write(sock, str, strlen(str));
+                }
+            }
+            status = write(sock, data->letters, strlen(data->letters));
+            sleep(1);
         }
-        if (!found)
-        {
-            printf("The recieved letter %c was not found.\n", buffer[0]);
-            write(sock, "Letter Unavailable.\n", 255);
-        }
-        else
-        {
-            write(sock, "Letter Found.\n", 255);
-        }
+    } //end of 16 char while
+}
 
-        status = write(sock, data->letters, strlen(data->letters));
-    }
+void resetGame(int sock, int pid)
+{
+    strcpy(data->letters, newLetters);
+    data->displayed = 0;
+    data->numClients = 0;
+    data->recieved = 0;
+    data->p1score = 0;
+    data->p2score = 0;
+    semnum = 0;
+    semctl_arg.val = 0;
+    status = semctl(numReady, semnum, SETVAL, semctl_arg);
 }
